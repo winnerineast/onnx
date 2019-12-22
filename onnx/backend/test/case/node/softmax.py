@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import numpy as np
+import numpy as np  # type: ignore
 
 import onnx
 from ..base import Base
@@ -13,7 +13,7 @@ from . import expect
 class Softmax(Base):
 
     @staticmethod
-    def export():
+    def export():  # type: () -> None
         node = onnx.helper.make_node(
             'Softmax',
             inputs=['x'],
@@ -26,8 +26,8 @@ class Softmax(Base):
                name='test_softmax_example')
 
     @staticmethod
-    def export_softmax_axis():
-        def softmax_2d(x):
+    def export_softmax_axis():  # type: () -> None
+        def softmax_2d(x):  # type: (np.ndarray) -> np.ndarray
             max_x = np.max(x, axis=1).reshape((-1, 1))
             exp_x = np.exp(x - max_x)
             return exp_x / np.sum(exp_x, axis=1).reshape((-1, 1))
@@ -84,3 +84,13 @@ class Softmax(Base):
         y = softmax_2d(x.reshape(12, 5)).reshape(3, 4, 5)
         expect(node, inputs=[x], outputs=[y],
                name='test_softmax_axis_2')
+
+        node = onnx.helper.make_node(
+            'Softmax',
+            inputs=['x'],
+            outputs=['y'],
+            axis=-1,
+        )
+        y = softmax_2d(x.reshape(12, 5)).reshape(3, 4, 5)
+        expect(node, inputs=[x], outputs=[y],
+               name='test_softmax_negative_axis')

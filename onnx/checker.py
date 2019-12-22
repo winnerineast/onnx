@@ -13,11 +13,17 @@ import functools
 from onnx import (ValueInfoProto,
                   AttributeProto,
                   TensorProto,
+                  SparseTensorProto,
                   NodeProto,
+                  ModelProto,
                   GraphProto,
                   IR_VERSION)
 import onnx.onnx_cpp2py_export.checker as C
 import onnx.defs
+from google.protobuf.message import Message
+from typing import TypeVar, Callable, Any, Type, cast, Union, Text
+from six import string_types
+import onnx.shape_inference
 
 
 # TODO: This thing where we reserialize the protobuf back into the
@@ -32,48 +38,62 @@ DEFAULT_CONTEXT.ir_version = IR_VERSION
 DEFAULT_CONTEXT.opset_imports = {'': onnx.defs.onnx_opset_version()}
 
 
+FuncType = TypeVar('FuncType', bound=Callable[..., Any])
+
+
 # TODO: This really doesn't seem worth the metaprogramming...
-def _create_checker(proto_type):
-    def decorator(py_func):
+def _create_checker(proto_type):  # type: (Type[Message]) -> Callable[[FuncType], FuncType]
+    def decorator(py_func):  # type: (FuncType) -> FuncType
         @functools.wraps(py_func)
-        def checker(proto, ctx=DEFAULT_CONTEXT):
+        def checker(proto, ctx=DEFAULT_CONTEXT):  # type: (Message, C.CheckerContext) -> Any
             if not isinstance(proto, proto_type):
                 raise RuntimeError(
                     'You cannot pass an object that is not of type {}'.format(
                         proto_type.__name__))
             return getattr(C, py_func.__name__)(
                 proto.SerializeToString(), ctx)
-        return checker
+        return cast(FuncType, checker)
     return decorator
 
 
 @_create_checker(ValueInfoProto)
-def check_value_info(value_info, ctx=DEFAULT_CONTEXT):
+def check_value_info(value_info, ctx=DEFAULT_CONTEXT):  # type: (ValueInfoProto, C.CheckerContext) -> None
     pass
 
 
 @_create_checker(TensorProto)
-def check_tensor(tensor, ctx=DEFAULT_CONTEXT):
+def check_tensor(tensor, ctx=DEFAULT_CONTEXT):  # type: (TensorProto, C.CheckerContext) -> None
     pass
 
 
 @_create_checker(AttributeProto)
-def check_attribute(attr, ctx=DEFAULT_CONTEXT):
+def check_attribute(attr, ctx=DEFAULT_CONTEXT):  # type: (AttributeProto, C.CheckerContext) -> None
     pass
 
 
 @_create_checker(NodeProto)
-def check_node(node, ctx=DEFAULT_CONTEXT):
+def check_node(node, ctx=DEFAULT_CONTEXT):  # type: (NodeProto, C.CheckerContext) -> None
     pass
 
 
 @_create_checker(GraphProto)
-def check_graph(graph, ctx=DEFAULT_CONTEXT):
+def check_graph(graph, ctx=DEFAULT_CONTEXT):  # type: (GraphProto, C.CheckerContext) -> None
     pass
 
 
-def check_model(model):
-    C.check_model(model.SerializeToString())
+def check_sparse_tensor(sparse, ctx=DEFAULT_CONTEXT):  # type: (SparseTensorProto, C.CheckerContext) -> None
+    C.check_sparse_tensor(sparse.SerializeToString(), ctx)
+
+
+def check_model(model, full_check=False):  # type: (Union[ModelProto, Text], bool) -> None
+    if isinstance(model, string_types):
+        C.check_model_path(model)
+        if full_check:
+            onnx.shape_inference.infer_shapes(onnx.load(model), True)
+    else:
+        C.check_model(model.SerializeToString())
+        if full_check:
+            onnx.shape_inference.infer_shapes(model, True)
 
 
 ValidationError = C.ValidationError
